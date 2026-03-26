@@ -6,10 +6,16 @@ export interface QueryRequest {
   question: string;
 }
 
+export interface BackendResponse {
+  status: 'success' | 'empty' | 'error';
+  message: string;
+  data: any[];
+}
+
 export interface QueryResponse {
   result: any[];
-  cypher_query?: string;
-  error?: string;
+  message?: string;
+  status?: string;
 }
 
 const api = axios.create({
@@ -20,8 +26,14 @@ const api = axios.create({
 });
 
 export const queryDrugInteractions = async (question: string): Promise<QueryResponse> => {
-  const response = await api.post<QueryResponse>('/api/query', { question });
-  return response.data;
+  const response = await api.post<BackendResponse>('/api/query', { question });
+
+  // Transform backend response to frontend format
+  return {
+    result: response.data.data || [],
+    message: response.data.message,
+    status: response.data.status,
+  };
 };
 
 export default api;
