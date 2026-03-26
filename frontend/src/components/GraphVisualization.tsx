@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import cytoscape, { Core, ElementDefinition } from 'cytoscape';
+import cytoscape from 'cytoscape';
+import type { Core, ElementDefinition } from 'cytoscape';
 
 interface GraphVisualizationProps {
   data: any[];
