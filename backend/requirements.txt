@@ -1,0 +1,6 @@
+# minimal backend dependencies for proxying to llm service
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-dotenv==1.0.1
+httpx==0.28.1  # for calling llm backend api
+pydantic==2.10.5

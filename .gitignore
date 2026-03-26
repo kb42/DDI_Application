@@ -1,0 +1,37 @@
+# environment
+.env
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+backend/venv/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# frontend
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+frontend/.env.local
+
+# ide
+.vscode/
+.idea/
+*.swp
+
+# logs
+*.log
+
+# os
+.DS_Store
