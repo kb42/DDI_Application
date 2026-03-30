@@ -67,6 +67,8 @@ const GraphVisualization = ({ data, onNodeSelect, queryContext }: GraphVisualiza
             style: {
               'width': 4,
               'line-color': '#94a3b8',
+              'source-arrow-color': '#94a3b8',
+              'source-arrow-shape': 'triangle',
               'target-arrow-color': '#94a3b8',
               'target-arrow-shape': 'triangle',
               'curve-style': 'bezier',
@@ -83,6 +85,7 @@ const GraphVisualization = ({ data, onNodeSelect, queryContext }: GraphVisualiza
             selector: 'edge[severity="Major"]',
             style: {
               'line-color': '#ef4444',
+              'source-arrow-color': '#ef4444',
               'target-arrow-color': '#ef4444',
               'width': 6,
             }
@@ -91,6 +94,7 @@ const GraphVisualization = ({ data, onNodeSelect, queryContext }: GraphVisualiza
             selector: 'edge[severity="Moderate"]',
             style: {
               'line-color': '#f59e0b',
+              'source-arrow-color': '#f59e0b',
               'target-arrow-color': '#f59e0b',
               'width': 5,
             }
@@ -99,6 +103,7 @@ const GraphVisualization = ({ data, onNodeSelect, queryContext }: GraphVisualiza
             selector: 'edge[severity="Minor"]',
             style: {
               'line-color': '#22c55e',
+              'source-arrow-color': '#22c55e',
               'target-arrow-color': '#22c55e',
               'width': 3,
             }
