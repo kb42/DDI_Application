@@ -5,10 +5,9 @@ import type { Core, ElementDefinition } from 'cytoscape';
 interface GraphVisualizationProps {
   data: any[];
   onNodeSelect?: (nodeId: string) => void;
-  queryContext?: string;
 }
 
-const GraphVisualization = ({ data, onNodeSelect, queryContext }: GraphVisualizationProps) => {
+const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
 
@@ -28,7 +27,7 @@ const GraphVisualization = ({ data, onNodeSelect, queryContext }: GraphVisualiza
       // Initialize Cytoscape instance
       const cy = cytoscape({
         container: containerRef.current,
-        elements: transformDataToElements(data, queryContext),
+        elements: transformDataToElements(data),
         style: [
           {
             selector: 'node',
@@ -82,12 +81,13 @@ const GraphVisualization = ({ data, onNodeSelect, queryContext }: GraphVisualiza
             }
           },
           {
-            selector: 'edge[severity="Major"]',
+            selector: 'edge[severity="Minor"]',
             style: {
-              'line-color': '#ef4444',
-              'source-arrow-color': '#ef4444',
-              'target-arrow-color': '#ef4444',
-              'width': 6,
+              'line-color': '#22c55e',
+              'source-arrow-color': '#22c55e',
+              'target-arrow-color': '#22c55e',
+              'width': 3,
+              'z-index': 1,
             }
           },
           {
@@ -97,15 +97,17 @@ const GraphVisualization = ({ data, onNodeSelect, queryContext }: GraphVisualiza
               'source-arrow-color': '#f59e0b',
               'target-arrow-color': '#f59e0b',
               'width': 5,
+              'z-index': 2,
             }
           },
           {
-            selector: 'edge[severity="Minor"]',
+            selector: 'edge[severity="Major"]',
             style: {
-              'line-color': '#22c55e',
-              'source-arrow-color': '#22c55e',
-              'target-arrow-color': '#22c55e',
-              'width': 3,
+              'line-color': '#ef4444',
+              'source-arrow-color': '#ef4444',
+              'target-arrow-color': '#ef4444',
+              'width': 6,
+              'z-index': 3,
             }
           },
           {
@@ -157,101 +159,65 @@ const GraphVisualization = ({ data, onNodeSelect, queryContext }: GraphVisualiza
 };
 
 // Transform Neo4j result data into Cytoscape elements
-const transformDataToElements = (data: any[], queryContext?: string): ElementDefinition[] => {
+const transformDataToElements = (data: any[]): ElementDefinition[] => {
+  console.log('transformDataToElements received data:', data);
   const elements: ElementDefinition[] = [];
   const nodeIds = new Set<string>();
 
-  // Try to extract drug name from query context
-  const extractDrugFromQuery = (query?: string): string => {
-    if (!query) return 'Query Source';
-
-    // Common patterns: "What interacts with X?", "Show interactions for X", etc.
-    const patterns = [
-      /(?:interacts?\s+with|interactions?\s+(?:for|of))\s+([A-Z][a-zA-Z\s]+?)[\?\.]/i,
-      /(?:show|find|get)\s+(?:me\s+)?(?:interactions?\s+)?(?:for|of|with)\s+([A-Z][a-zA-Z\s]+?)[\?\.]/i,
-    ];
-
-    for (const pattern of patterns) {
-      const match = query.match(pattern);
-      if (match && match[1]) {
-        return match[1].trim();
-      }
-    }
-
-    return 'Query Source';
-  };
-
-  const sourceDrugName = extractDrugFromQuery(queryContext);
-
   data.forEach((item, index) => {
-    // Handle different backend response formats
-    let drug1Name: string;
-    let drug2Name: string | null = null;
-    let edgeDetails: any;
-    let nodeType1: string;
-    let nodeType2: string | null = null;
+    // New standardized backend format from prompt_builder.py
+    // Expected fields: Target1, Target2, NodeType1, NodeType2, EdgeDetails, EdgeType
+    if (!item.Target1 || !item.Target2) {
+      console.warn('Skipping item with missing Target1 or Target2:', item);
+      return;
+    }
+    console.log(`Processing item ${index}:`, item);
 
-    // Format 1: Drug-to-Drug interactions (Drug1Name, Drug2Name, InteractionDetails)
-    if (item.Drug1Name && item.Drug2Name) {
-      drug1Name = item.Drug1Name;
-      drug2Name = item.Drug2Name;
-      edgeDetails = item.InteractionDetails || {};
-      nodeType1 = item.NodeType1?.[0] || 'Drug';
-      nodeType2 = item.NodeType2?.[0] || 'Drug';
-    }
-    // Format 2: Single drug query (TargetName, EdgeDetails)
-    else if (item.TargetName) {
-      drug1Name = sourceDrugName; // Use extracted drug name
-      drug2Name = item.TargetName;
-      edgeDetails = item.EdgeDetails || {};
-      nodeType1 = 'Drug';
-      nodeType2 = item.NodeType?.[0] || 'Drug';
-    }
-    // Fallback: try to extract from item structure
-    else {
-      return; // Skip malformed items
-    }
+    const node1Name = item.Target1;
+    const node2Name = item.Target2;
+    const nodeType1 = item.NodeType1?.[0] || 'Drug';
+    const nodeType2 = item.NodeType2?.[0] || 'Drug';
+    const edgeDetails = item.EdgeDetails || {};
 
-    // Add first node
-    if (!nodeIds.has(drug1Name)) {
+    // Add first node (source drug)
+    if (!nodeIds.has(node1Name)) {
       elements.push({
         data: {
-          id: drug1Name,
-          label: drug1Name,
+          id: node1Name,
+          label: node1Name,
           type: nodeType1,
         }
       });
-      nodeIds.add(drug1Name);
+      nodeIds.add(node1Name);
     }
 
-    // Add second node if exists
-    if (drug2Name && !nodeIds.has(drug2Name)) {
+    // Add second node (target drug)
+    if (!nodeIds.has(node2Name)) {
       elements.push({
         data: {
-          id: drug2Name,
-          label: drug2Name,
-          type: nodeType2 || 'Drug',
+          id: node2Name,
+          label: node2Name,
+          type: nodeType2,
         }
       });
-      nodeIds.add(drug2Name);
+      nodeIds.add(node2Name);
     }
 
     // Add edge/relationship
-    if (drug2Name) {
-      elements.push({
-        data: {
-          id: `edge-${index}`,
-          source: drug1Name,
-          target: drug2Name,
-          label: edgeDetails.effect || '',
-          severity: edgeDetails.severity,
-          effect: edgeDetails.effect,
-          reference: edgeDetails.reference,
-        }
-      });
-    }
+    elements.push({
+      data: {
+        id: `edge-${index}`,
+        source: node1Name,
+        target: node2Name,
+        label: edgeDetails.effect || '',
+        severity: edgeDetails.severity,
+        effect: edgeDetails.effect,
+        reference: edgeDetails.reference,
+      }
+    });
   });
 
+  console.log('Generated elements:', elements);
   return elements;
 };
 

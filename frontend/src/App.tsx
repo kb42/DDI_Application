@@ -6,7 +6,6 @@ import { queryDrugInteractions } from './services/api'
 
 function App() {
   const [graphData, setGraphData] = useState<any[]>([])
-  const [lastQuery, setLastQuery] = useState<string>('')
 
   const mutation = useMutation({
     mutationFn: queryDrugInteractions,
@@ -16,7 +15,6 @@ function App() {
   })
 
   const handleSearch = (query: string) => {
-    setLastQuery(query)
     mutation.mutate(query)
   }
 
@@ -48,7 +46,6 @@ function App() {
           {graphData.length > 0 && (
             <GraphVisualization
               data={graphData}
-              queryContext={lastQuery}
               onNodeSelect={(nodeId) => console.log('Selected node:', nodeId)}
             />
           )}
