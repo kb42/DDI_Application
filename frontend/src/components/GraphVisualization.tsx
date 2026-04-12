@@ -80,6 +80,13 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
               'font-weight': 'bold',
             }
           },
+          // autorotate labels to prevent overlap: https://stackoverflow.com/a/53737071
+          {
+            selector: "edge[label]",
+            style: {
+              'text-rotation': 'autorotate',
+            }
+          },
           {
             selector: 'edge[severity="Minor"]',
             style: {
