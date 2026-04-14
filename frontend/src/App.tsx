@@ -6,11 +6,13 @@ import { queryDrugInteractions } from './services/api'
 
 function App() {
   const [graphData, setGraphData] = useState<any[]>([])
+  const [summary, setSummary] = useState<string>('')
 
   const mutation = useMutation({
     mutationFn: queryDrugInteractions,
     onSuccess: (data) => {
       setGraphData(data.result || [])
+      setSummary(data.summary || '')
     },
   })
 
@@ -42,14 +44,27 @@ function App() {
           </div>
         )}
 
-        <div className="w-full" style={{ height: 'calc(100vh - 280px)' }}>
-          {graphData.length > 0 && (
-            <GraphVisualization
-              data={graphData}
-              onNodeSelect={(nodeId) => console.log('Selected node:', nodeId)}
-            />
-          )}
-        </div>
+        {graphData.length > 0 && (
+          <div className="flex flex-col gap-4">
+            <div className="w-full" style={{ height: 'calc(100vh - 400px)' }}>
+              <GraphVisualization
+                data={graphData}
+                onNodeSelect={(nodeId) => console.log('Selected node:', nodeId)}
+              />
+            </div>
+
+            {summary && (
+              <details className="max-w-4xl mx-auto w-full bg-white rounded-lg shadow-sm border border-slate-200">
+                <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-slate-700 hover:bg-slate-50">
+                  View AI Summary
+                </summary>
+                <div className="px-4 py-3 text-sm text-slate-600 border-t border-slate-200">
+                  {summary}
+                </div>
+              </details>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

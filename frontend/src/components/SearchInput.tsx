@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 
 interface SearchInputProps {
   onSearch: (query: string) => void;
@@ -15,12 +15,6 @@ const SearchInput = ({ onSearch, isLoading = false }: SearchInputProps) => {
     }
   };
 
-  const exampleQueries = [
-    "What interacts with Metformin?",
-    "Are there any severe interactions with contrast dye?",
-    "What treats Type 2 Diabetes?",
-  ];
-
   return (
     <div className="w-full max-w-4xl mx-auto p-6">
       <div className="mb-4">
@@ -32,7 +26,7 @@ const SearchInput = ({ onSearch, isLoading = false }: SearchInputProps) => {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="mb-4">
+      <form onSubmit={handleSubmit}>
         <div className="flex gap-2">
           <input
             type="text"
@@ -51,20 +45,6 @@ const SearchInput = ({ onSearch, isLoading = false }: SearchInputProps) => {
           </button>
         </div>
       </form>
-
-      <div className="flex flex-wrap gap-2">
-        <span className="text-sm text-slate-600">Try:</span>
-        {exampleQueries.map((example, index) => (
-          <button
-            key={index}
-            onClick={() => setQuery(example)}
-            disabled={isLoading}
-            className="text-sm px-3 py-1 bg-slate-100 text-slate-700 rounded-full hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {example}
-          </button>
-        ))}
-      </div>
     </div>
   );
 };

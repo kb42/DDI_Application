@@ -9,12 +9,14 @@ export interface QueryRequest {
 export interface BackendResponse {
   status: 'success' | 'empty' | 'error';
   message: string;
+  summary: string;
   data: any[];
 }
 
 export interface QueryResponse {
   result: any[];
   message?: string;
+  summary?: string;
   status?: string;
 }
 
@@ -32,6 +34,7 @@ export const queryDrugInteractions = async (question: string): Promise<QueryResp
   return {
     result: response.data.data || [],
     message: response.data.message,
+    summary: response.data.summary,
     status: response.data.status,
   };
 };
