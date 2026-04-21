@@ -12,6 +12,8 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
   const cyRef = useRef<Core | null>(null);
   const [hoveredEdge, setHoveredEdge] = useState<any>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [nodeEdges, setNodeEdges] = useState<any[]>([]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -36,17 +38,20 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
             style: {
               'background-color': '#f59e0b',
               'label': 'data(label)',
-              'color': '#1e293b',
+              'color': '#ffffff',
               'text-valign': 'center',
               'text-halign': 'center',
-              'font-size': '14px',
+              'font-size': '11px',
               'font-weight': 'bold',
               'text-wrap': 'wrap',
-              'text-max-width': '120px',
-              'width': '100px',
-              'height': '100px',
-              'border-width': 3,
+              'text-max-width': '80px',
+              'width': '70px',
+              'height': '70px',
+              'border-width': 2,
               'border-color': '#d97706',
+              'text-outline-width': 2,
+              'text-outline-color': '#000000',
+              'text-outline-opacity': 0.3,
             }
           },
           {
@@ -55,14 +60,20 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
               'background-color': '#f59e0b',
               'border-color': '#d97706',
               'shape': 'ellipse',
+              'color': '#ffffff',
             }
           },
           {
             selector: 'node[type="Diagnosis"]',
             style: {
-              'background-color': '#3b82f6',
-              'border-color': '#1e40af',
+              'background-color': '#8b5cf6',
+              'border-color': '#6d28d9',
               'shape': 'round-rectangle',
+              'color': '#ffffff',
+              'width': '90px',
+              'height': '90px',
+              'font-size': '10px',
+              'text-max-width': '85px',
             }
           },
           {
@@ -133,19 +144,29 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
           name: 'cose',
           animate: true,
           animationDuration: 500,
-          padding: 100,
-          nodeRepulsion: 8000,
-          idealEdgeLength: 200,
-          edgeElasticity: 100,
-          gravity: 0.1,
+          padding: 80,
+          nodeRepulsion: 12000,
+          idealEdgeLength: 150,
+          edgeElasticity: 80,
+          gravity: 0.05,
         },
       });
 
       // Handle node selection
       cy.on('tap', 'node', (event) => {
         const node = event.target;
+        const nodeId = node.id();
+        setSelectedNode(nodeId);
+
+        // Get all edges connected to this node
+        const connectedEdges = cy.edges().filter((edge: any) => {
+          return edge.data('source') === nodeId || edge.data('target') === nodeId;
+        });
+
+        setNodeEdges(connectedEdges.map((edge: any) => edge.data()));
+
         if (onNodeSelect) {
-          onNodeSelect(node.id());
+          onNodeSelect(nodeId);
         }
       });
 
@@ -174,10 +195,10 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
   }, [data, onNodeSelect]);
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full flex gap-4">
       <div
         ref={containerRef}
-        className="w-full h-full bg-slate-50 rounded-lg border border-slate-200"
+        className={`${selectedNode ? 'w-3/4' : 'w-full'} h-full bg-slate-50 rounded-lg border border-slate-200 transition-all`}
       />
 
       {/* Edge Hover Tooltip */}
@@ -248,6 +269,54 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Side Panel for Node Details */}
+      {selectedNode && (
+        <div className="w-1/4 h-full bg-white rounded-lg border border-slate-200 overflow-y-auto">
+          <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex justify-between items-center">
+            <h3 className="font-semibold text-slate-900">{selectedNode}</h3>
+            <button onClick={() => setSelectedNode(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+          </div>
+          <div className="p-4 space-y-3">
+            {nodeEdges.length === 0 && <p className="text-sm text-slate-500">No connections</p>}
+            {nodeEdges.map((edge, idx) => {
+              const otherNode = edge.source === selectedNode ? edge.target : edge.source;
+              return (
+                <div key={idx} className="border border-slate-200 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-sm text-slate-900">{otherNode}</span>
+                    {edge.severity && (
+                      <span className={`px-2 py-0.5 text-xs font-semibold rounded ${
+                        edge.severity === 'Major' ? 'bg-red-100 text-red-800' :
+                        edge.severity === 'Moderate' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'
+                      }`}>{edge.severity}</span>
+                    )}
+                  </div>
+                  {edge.effect && <p className="text-xs text-slate-700">{edge.effect}</p>}
+                  {edge.mechanism && <p className="text-xs text-slate-600"><span className="font-semibold">Mechanism:</span> {edge.mechanism}</p>}
+                  {edge.safer_alt && (
+                    <div className="p-2 bg-green-50 border border-green-200 rounded text-xs text-green-800">
+                      <span className="font-semibold">💡 Alternative:</span> {edge.safer_alt}
+                    </div>
+                  )}
+                  {edge.rationale && <p className="text-xs text-slate-600 italic">{edge.rationale}</p>}
+                  {edge.reference && (
+                    <p className="text-xs text-blue-600 truncate" title={edge.reference}>
+                      📚 {edge.reference}
+                    </p>
+                  )}
+                  {edge.admission_count && (
+                    <div className="pt-2 border-t border-slate-100 space-y-1">
+                      <p className="text-xs text-slate-600"><span className="font-semibold">Admissions:</span> {edge.admission_count.toLocaleString()}</p>
+                      {edge.avg_severity && <p className="text-xs text-slate-600"><span className="font-semibold">Avg Severity:</span> {edge.avg_severity.toFixed(2)}</p>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
