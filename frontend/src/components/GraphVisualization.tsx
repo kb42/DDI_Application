@@ -38,7 +38,7 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
           {
             selector: 'node',
             style: {
-              'background-color': '#f59e0b',
+              'background-color': '#3b82f6',
               'label': 'data(label)',
               'color': '#ffffff',
               'text-valign': 'center',
@@ -50,7 +50,7 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
               'width': '70px',
               'height': '70px',
               'border-width': 2,
-              'border-color': '#d97706',
+              'border-color': '#1e40af',
               'text-outline-width': 2,
               'text-outline-color': '#000000',
               'text-outline-opacity': 0.3,
@@ -67,8 +67,8 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
           {
             selector: 'node[type="Drug"]',
             style: {
-              'background-color': '#f59e0b',
-              'border-color': '#d97706',
+              'background-color': '#3b82f6',
+              'border-color': '#1e40af',
               'shape': 'ellipse',
               'color': '#ffffff',
             }
