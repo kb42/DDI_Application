@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import cytoscape from 'cytoscape';
 import type { Core, ElementDefinition } from 'cytoscape';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faLightbulb, faBook, faTimes } from '@fortawesome/free-solid-svg-icons';
 
 interface GraphVisualizationProps {
   data: any[];
@@ -193,18 +195,22 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
         padding: 50,
       }).run();
 
-      // Handle node selection
+      // Handle node selection - use direct event handler for reliability
       cy.on('tap', 'node', (event) => {
+        event.preventDefault();
         const node = event.target;
         const nodeId = node.id();
-        setSelectedNode(nodeId);
 
-        // Get all edges connected to this node
+        // Get all edges connected to this node immediately
         const connectedEdges = cy.edges().filter((edge: any) => {
           return edge.data('source') === nodeId || edge.data('target') === nodeId;
         });
 
-        setNodeEdges(connectedEdges.map((edge: any) => edge.data()));
+        const edgesData = connectedEdges.map((edge: any) => edge.data());
+
+        // Update state in a single batch to ensure reliability
+        setSelectedNode(nodeId);
+        setNodeEdges(edgesData);
 
         if (onNodeSelect) {
           onNodeSelect(nodeId);
@@ -239,7 +245,7 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
     <div className="relative w-full h-full flex gap-4">
       <div
         ref={containerRef}
-        className={`${selectedNode ? 'w-3/4' : 'w-full'} h-full bg-slate-50 rounded-lg border border-slate-200 transition-all`}
+        className={`${selectedNode ? 'flex-1 min-w-0' : 'w-full'} h-full bg-slate-50 rounded-lg border border-slate-200`}
       />
 
       {/* Edge Hover Tooltip */}
@@ -287,7 +293,8 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
           {hoveredEdge.safer_alt && (
             <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
               <p className="text-xs text-green-800">
-                <span className="font-semibold">💡 Safer Alternative:</span> {hoveredEdge.safer_alt}
+                <FontAwesomeIcon icon={faLightbulb} className="w-3 h-3 mr-1" />
+                <span className="font-semibold">Safer Alternative:</span> {hoveredEdge.safer_alt}
               </p>
             </div>
           )}
@@ -313,45 +320,75 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
         </div>
       )}
 
-      {/* Side Panel for Node Details */}
+      {/* Side Panel for Node Details - Fixed width for better consistency */}
       {selectedNode && (
-        <div className="w-1/4 h-full bg-white rounded-lg border border-slate-200 overflow-y-auto">
-          <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex justify-between items-center">
-            <h3 className="font-semibold text-slate-900">{selectedNode}</h3>
-            <button onClick={() => setSelectedNode(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+        <div className="w-80 h-full bg-white rounded-lg border border-slate-200 overflow-y-auto flex-shrink-0">
+          <div className="sticky top-0 bg-white border-b border-slate-200 p-3 flex justify-between items-center">
+            <h3 className="font-semibold text-slate-900 text-sm truncate">{selectedNode}</h3>
+            <button
+              onClick={() => setSelectedNode(null)}
+              className="text-slate-400 hover:text-slate-600 ml-2 flex-shrink-0"
+            >
+              <FontAwesomeIcon icon={faTimes} className="w-4 h-4" />
+            </button>
           </div>
-          <div className="p-4 space-y-3">
-            {nodeEdges.length === 0 && <p className="text-sm text-slate-500">No connections</p>}
+          <div className="p-3 space-y-2">
+            {nodeEdges.length === 0 && <p className="text-xs text-slate-500">No connections</p>}
             {nodeEdges.map((edge, idx) => {
               const otherNode = edge.source === selectedNode ? edge.target : edge.source;
               return (
-                <div key={idx} className="border border-slate-200 rounded-lg p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-sm text-slate-900">{otherNode}</span>
+                <div key={idx} className="border border-slate-200 rounded-lg p-2 space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-medium text-xs text-slate-900 leading-tight">{otherNode}</span>
                     {edge.severity && (
-                      <span className={`px-2 py-0.5 text-xs font-semibold rounded ${
+                      <span className={`px-1.5 py-0.5 text-xs font-semibold rounded flex-shrink-0 ${
                         edge.severity === 'Major' ? 'bg-red-100 text-red-800' :
                         edge.severity === 'Moderate' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'
                       }`}>{edge.severity}</span>
                     )}
                   </div>
-                  {edge.effect && <p className="text-xs text-slate-700">{edge.effect}</p>}
-                  {edge.mechanism && <p className="text-xs text-slate-600"><span className="font-semibold">Mechanism:</span> {edge.mechanism}</p>}
-                  {edge.safer_alt && (
-                    <div className="p-2 bg-green-50 border border-green-200 rounded text-xs text-green-800">
-                      <span className="font-semibold">💡 Alternative:</span> {edge.safer_alt}
-                    </div>
-                  )}
-                  {edge.rationale && <p className="text-xs text-slate-600 italic">{edge.rationale}</p>}
-                  {edge.reference && (
-                    <p className="text-xs text-blue-600 truncate" title={edge.reference}>
-                      📚 {edge.reference}
+                  {edge.effect && <p className="text-xs text-slate-700 leading-snug">{edge.effect}</p>}
+                  {edge.mechanism && (
+                    <p className="text-xs text-slate-600 leading-snug">
+                      <span className="font-semibold">Mechanism:</span> {edge.mechanism}
                     </p>
                   )}
+                  {edge.safer_alt && (
+                    <div className="p-1.5 bg-green-50 border border-green-200 rounded text-xs text-green-800 leading-snug">
+                      <FontAwesomeIcon icon={faLightbulb} className="w-3 h-3 mr-1" />
+                      <span className="font-semibold">Alternative:</span> {edge.safer_alt}
+                    </div>
+                  )}
+                  {edge.rationale && <p className="text-xs text-slate-600 italic leading-snug">{edge.rationale}</p>}
+                  {edge.reference && (
+                    edge.reference_url ? (
+                      <a
+                        href={edge.reference_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:text-blue-800 hover:underline truncate block"
+                        title={edge.reference}
+                      >
+                        <FontAwesomeIcon icon={faBook} className="w-3 h-3 mr-1" />
+                        {edge.reference}
+                      </a>
+                    ) : (
+                      <p className="text-xs text-blue-600 truncate" title={edge.reference}>
+                        <FontAwesomeIcon icon={faBook} className="w-3 h-3 mr-1" />
+                        {edge.reference}
+                      </p>
+                    )
+                  )}
                   {edge.admission_count && (
-                    <div className="pt-2 border-t border-slate-100 space-y-1">
-                      <p className="text-xs text-slate-600"><span className="font-semibold">Admissions:</span> {edge.admission_count.toLocaleString()}</p>
-                      {edge.avg_severity && <p className="text-xs text-slate-600"><span className="font-semibold">Avg Severity:</span> {edge.avg_severity.toFixed(2)}</p>}
+                    <div className="pt-1.5 border-t border-slate-100 space-y-0.5">
+                      <p className="text-xs text-slate-600">
+                        <span className="font-semibold">Admissions:</span> {edge.admission_count.toLocaleString()}
+                      </p>
+                      {edge.avg_severity && (
+                        <p className="text-xs text-slate-600">
+                          <span className="font-semibold">Avg Severity:</span> {edge.avg_severity.toFixed(2)}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -417,6 +454,7 @@ const transformDataToElements = (data: any[]): ElementDefinition[] => {
         severity: edgeDetails.severity,
         effect: edgeDetails.effect,
         reference: edgeDetails.reference,
+        reference_url: edgeDetails.reference_url,
         mechanism: edgeDetails.mechanism,
         safer_alt: edgeDetails.safer_alt,
         rationale: edgeDetails.rationale,
