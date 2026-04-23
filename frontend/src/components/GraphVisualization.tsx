@@ -54,6 +54,14 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
               'text-outline-opacity': 0.3,
             }
           },
+          // Parent nodes are for grouping by severity and can be invisible
+          {
+            selector: 'node:parent',
+            style: {
+              'background-opacity': 0,
+              'border-width': 0,
+            }
+          },
           {
             selector: 'node[type="Drug"]',
             style: {
@@ -95,7 +103,7 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
               'font-weight': 'bold',
             }
           },
-          // autorotate labels to prevent overlap: https://stackoverflow.com/a/53737071
+          // Autorotate labels to prevent overlap: https://stackoverflow.com/a/53737071
           {
             selector: "edge[label]",
             style: {
@@ -151,6 +159,39 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
           gravity: 0.05,
         },
       });
+
+      // Group nodes by severity using parent nodes
+      const usedSeverities = new Set<string>();
+
+      cy.edges().forEach(edge => {
+        const sev = edge.data('severity');
+        if (sev) usedSeverities.add(sev);
+      });
+
+      usedSeverities.forEach(sev => {
+        if (cy.getElementById(sev).empty()) {
+          cy.add({ data: { id: sev } });
+        }
+      });
+
+      cy.nodes().forEach(node => {
+        const edges = node.connectedEdges();
+
+        let group = 'Unknown';
+
+        if (edges.length > 0) {
+          group = edges[0].data('severity');
+          if (usedSeverities.has(group)) {
+            node.move({ parent: group });
+          }
+        }
+      });
+
+      cy.layout({
+        name: 'cose',
+        animate: true,
+        padding: 50,
+      }).run();
 
       // Handle node selection
       cy.on('tap', 'node', (event) => {
