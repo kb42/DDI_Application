@@ -258,10 +258,10 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
             transform: 'translate(-50%, -120%)',
           }}
         >
-          {/* Severity Badge */}
-          <div className="flex items-center gap-2 mb-2">
+          {/* Severity + Polarity + Category Badges */}
+          <div className="flex items-center gap-1.5 mb-2 flex-wrap">
             <span
-              className={`px-2 py-1 text-xs font-semibold rounded-full ${
+              className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
                 hoveredEdge.severity === 'Major'
                   ? 'bg-red-100 text-red-800'
                   : hoveredEdge.severity === 'Moderate'
@@ -271,6 +271,24 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
             >
               {hoveredEdge.severity || 'Unknown'}
             </span>
+            {hoveredEdge.effect_polarity && (
+              <span
+                className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${
+                  hoveredEdge.effect_polarity === 'Harmful'
+                    ? 'bg-red-50 text-red-700 border-red-200'
+                    : hoveredEdge.effect_polarity === 'Beneficial'
+                    ? 'bg-green-50 text-green-700 border-green-200'
+                    : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                }`}
+              >
+                {hoveredEdge.effect_polarity}
+              </span>
+            )}
+            {hoveredEdge.mechanism_group && (
+              <span className="px-2 py-0.5 text-xs rounded-full bg-slate-100 text-slate-500">
+                {hoveredEdge.mechanism_group}
+              </span>
+            )}
           </div>
 
           {/* Effect */}
@@ -282,10 +300,8 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
 
           {/* Mechanism */}
           {hoveredEdge.mechanism && (
-            <div className="mb-2">
-              <p className="text-xs text-slate-600">
-                <span className="font-semibold">Mechanism:</span> {hoveredEdge.mechanism}
-              </p>
+            <div className="mb-2 px-2 py-1.5 bg-slate-50 border-l-2 border-slate-300 rounded-sm">
+              <p className="text-xs text-slate-600">{hoveredEdge.mechanism}</p>
             </div>
           )}
 
@@ -338,20 +354,32 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
               const otherNode = edge.source === selectedNode ? edge.target : edge.source;
               return (
                 <div key={idx} className="border border-slate-200 rounded-lg p-2 space-y-1.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="font-medium text-xs text-slate-900 leading-tight">{otherNode}</span>
+                  <span className="font-medium text-xs text-slate-900 leading-tight">{otherNode}</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     {edge.severity && (
-                      <span className={`px-1.5 py-0.5 text-xs font-semibold rounded flex-shrink-0 ${
+                      <span className={`px-1.5 py-0.5 text-xs font-semibold rounded ${
                         edge.severity === 'Major' ? 'bg-red-100 text-red-800' :
                         edge.severity === 'Moderate' ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'
                       }`}>{edge.severity}</span>
                     )}
+                    {edge.effect_polarity && (
+                      <span className={`px-1.5 py-0.5 text-xs font-semibold rounded border ${
+                        edge.effect_polarity === 'Harmful' ? 'bg-red-50 text-red-700 border-red-200' :
+                        edge.effect_polarity === 'Beneficial' ? 'bg-green-50 text-green-700 border-green-200' :
+                        'bg-yellow-50 text-yellow-700 border-yellow-200'
+                      }`}>{edge.effect_polarity}</span>
+                    )}
+                    {edge.mechanism_group && (
+                      <span className="px-1.5 py-0.5 text-xs rounded bg-slate-100 text-slate-500">
+                        {edge.mechanism_group}
+                      </span>
+                    )}
                   </div>
                   {edge.effect && <p className="text-xs text-slate-700 leading-snug">{edge.effect}</p>}
                   {edge.mechanism && (
-                    <p className="text-xs text-slate-600 leading-snug">
-                      <span className="font-semibold">Mechanism:</span> {edge.mechanism}
-                    </p>
+                    <div className="px-2 py-1.5 bg-slate-50 border-l-2 border-slate-300 rounded-sm">
+                      <p className="text-xs text-slate-600 leading-snug">{edge.mechanism}</p>
+                    </div>
                   )}
                   {edge.safer_alt && (
                     <div className="p-1.5 bg-green-50 border border-green-200 rounded text-xs text-green-800 leading-snug">
@@ -456,6 +484,8 @@ const transformDataToElements = (data: any[]): ElementDefinition[] => {
         reference: edgeDetails.reference,
         reference_url: edgeDetails.reference_url,
         mechanism: edgeDetails.mechanism,
+        mechanism_group: edgeDetails.mechanism_group,
+        effect_polarity: edgeDetails.effect_polarity,
         safer_alt: edgeDetails.safer_alt,
         rationale: edgeDetails.rationale,
         source_type: edgeDetails.source,
