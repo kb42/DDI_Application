@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import GraphVisualization from './components/GraphVisualization'
 import { queryDrugInteractions } from './services/api'
@@ -21,6 +21,10 @@ function App() {
   const handleSearch = (q: string) => {
     mutation.mutate(q)
   }
+
+  const handleNodeSelect = useCallback((nodeId: string) => {
+    console.log('Selected node:', nodeId);
+  }, []);
 
   const [summaryExpanded, setSummaryExpanded] = useState(false);
 
@@ -59,7 +63,7 @@ function App() {
       <div className="flex-1 relative min-h-0">
         {graphData.length > 0 ? (
           <div className="absolute inset-0 p-4">
-            <GraphVisualization data={graphData} onNodeSelect={(nodeId) => console.log('Selected node:', nodeId)} />
+            <GraphVisualization data={graphData} onNodeSelect={handleNodeSelect} />
           </div>
         ) : (
           <div className="h-full flex items-center justify-center">

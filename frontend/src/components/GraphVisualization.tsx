@@ -239,7 +239,7 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
         cyRef.current = null;
       }
     };
-  }, [data, onNodeSelect]);
+  }, [data]);
 
   return (
     <div className="relative w-full h-full flex gap-4">
