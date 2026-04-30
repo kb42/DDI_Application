@@ -44,10 +44,10 @@ function App() {
     mutation.mutate(q)
   }
 
-  // Only expand on node click when we're in the initial isolated-node state.
-  // Once a real query graph is loaded, node clicks just open the side panel as before.
-  const handleNodeSelect = useCallback((nodeId: string) => {
-    if (isInitialState.current) {
+  // Single click → sidebar (handled inside GraphVisualization, nothing to do here)
+  // Double click → always expand, regardless of whether we're in seed or query state
+  const handleNodeSelect = useCallback((nodeId: string, isDoubleClick: boolean) => {
+    if (isDoubleClick) {
       expandMutation.mutate(nodeId)
     }
   }, [])
@@ -96,10 +96,9 @@ function App() {
               </div>
             )}
             <GraphVisualization data={graphData} onNodeSelect={handleNodeSelect} />
-            {/* Hint shown only on the initial seed state */}
-            {isInitialState.current && !expandMutation.isPending && (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-white/90 border border-slate-200 rounded-full shadow text-xs text-slate-500 pointer-events-none">
-                Click a node to explore its interactions, or search above
+            {!expandMutation.isPending && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-white/90 border border-slate-200 rounded-full shadow text-xs text-slate-500 pointer-events-none whitespace-nowrap">
+                Single click to inspect · Double click to expand interactions
               </div>
             )}
           </div>

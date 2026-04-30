@@ -6,7 +6,7 @@ import { faLightbulb, faBook, faTimes } from '@fortawesome/free-solid-svg-icons'
 
 interface GraphVisualizationProps {
   data: any[];
-  onNodeSelect?: (nodeId: string) => void;
+  onNodeSelect?: (nodeId: string, isDoubleClick: boolean) => void;
 }
 
 const GRAPH_FONT_FAMILY = 'Inter, system-ui, sans-serif';
@@ -560,7 +560,7 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
         layout.run();
       }
 
-      // Handle node selection - use direct event handler for reliability
+      // Single tap → open sidebar
       cy.on('tap', 'node', (event) => {
         event.preventDefault();
         const node = event.target;
@@ -575,13 +575,22 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
 
         const edgesData = connectedEdges.map((edge: any) => edge.data());
 
-        // Update state in a single batch to ensure reliability
         setSelectedNode(nodeId);
         setSelectedSeverityGroup(isSeverityGroup ? nodeId : null);
         setNodeEdges(edgesData);
 
         if (onNodeSelect) {
-          onNodeSelect(nodeId);
+          onNodeSelect(nodeId, false);
+        }
+      });
+
+      // Double tap → expand node interactions
+      cy.on('dbltap', 'node', (event) => {
+        event.preventDefault();
+        const node = event.target;
+        if (node.isParent() || usedSeverities.has(node.id())) return;
+        if (onNodeSelect) {
+          onNodeSelect(node.id(), true);
         }
       });
 
