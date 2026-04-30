@@ -15,6 +15,14 @@ const APPROX_CHAR_WIDTH = NODE_FONT_SIZE * 0.58;
 const LINE_HEIGHT_PX = NODE_FONT_SIZE * 1.22;
 const DIAGNOSIS_GRID_COLUMN_GAP = 132;
 const DIAGNOSIS_GRID_ROW_GAP = 62;
+const DIAGNOSIS_GRID_NODE_CLEARANCE = 96;
+const DRUG_SEVERITY_NODE_GAP = 122;
+
+const DRUG_SEVERITY_LAYOUT: Record<string, { angle: number; radius: number }> = {
+  Major: { angle: -42, radius: 285 },
+  Moderate: { angle: 150, radius: 265 },
+  Minor: { angle: 28, radius: 315 },
+};
 
 const getWrappedLabel = (label: string, maxLineChars: number): string[] => {
   const normalizedLabel = String(label || '').replace(/\s+/g, ' ').trim();
@@ -123,6 +131,156 @@ const getNodeVisuals = (label: string, type: string) => {
   return type === 'Diagnosis' ? getDiagnosisNodeVisuals(label) : getDrugNodeVisuals(label);
 };
 
+const getSeverityLayoutPosition = (
+  anchorPosition: { x: number; y: number },
+  severity: string,
+  index: number,
+  count: number,
+) => {
+  const config = DRUG_SEVERITY_LAYOUT[severity] || { angle: 90, radius: 285 };
+  const angle = (config.angle * Math.PI) / 180;
+  const radial = { x: Math.cos(angle), y: Math.sin(angle) };
+  const tangent = { x: -Math.sin(angle), y: Math.cos(angle) };
+  const middle = (count - 1) / 2;
+  const row = Math.floor(index / 5);
+  const columnIndex = index % 5;
+  const columnsInRow = Math.min(5, count - row * 5);
+  const rowMiddle = (columnsInRow - 1) / 2;
+  const tangentOffset = (count <= 5 ? index - middle : columnIndex - rowMiddle) * DRUG_SEVERITY_NODE_GAP;
+  const radialOffset = row * 118;
+
+  return {
+    x: anchorPosition.x + radial.x * (config.radius + radialOffset) + tangent.x * tangentOffset,
+    y: anchorPosition.y + radial.y * (config.radius + radialOffset) + tangent.y * tangentOffset,
+  };
+};
+
+const arrangeDrugSeverityClusters = (cy: Core) => {
+  const anchorNodes = cy
+    .nodes('node[type="Drug"]')
+    .filter((node) => node.connectedEdges().length >= 6);
+
+  cy.batch(() => {
+    anchorNodes.forEach((anchorNode) => {
+      const groups = new Map<string, cytoscape.NodeSingular[]>();
+
+      anchorNode.connectedEdges().forEach((edge) => {
+        const source = edge.source();
+        const target = edge.target();
+        const neighbor = source.id() === anchorNode.id() ? target : source;
+
+        if (neighbor.data('type') !== 'Drug' || neighbor.connectedEdges().length >= anchorNode.connectedEdges().length) {
+          return;
+        }
+
+        const severity = edge.data('severity');
+        if (!severity || !DRUG_SEVERITY_LAYOUT[severity]) return;
+
+        const group = groups.get(severity) || [];
+        group.push(neighbor);
+        groups.set(severity, group);
+      });
+
+      groups.forEach((nodes, severity) => {
+        if (nodes.length < 2 || nodes.length > 12) return;
+
+        const sortedNodes = [...nodes].sort((a, b) =>
+          String(a.data('label')).localeCompare(String(b.data('label'))),
+        );
+
+        sortedNodes.forEach((node, index) => {
+          node.position(getSeverityLayoutPosition(anchorNode.position(), severity, index, sortedNodes.length));
+        });
+      });
+    });
+  });
+};
+
+const getRectDistance = (
+  point: { x: number; y: number },
+  rect: { left: number; right: number; top: number; bottom: number },
+) => {
+  const dx = Math.max(rect.left - point.x, 0, point.x - rect.right);
+  const dy = Math.max(rect.top - point.y, 0, point.y - rect.bottom);
+
+  return Math.sqrt(dx * dx + dy * dy);
+};
+
+const getDiagnosisGridStart = (
+  cy: Core,
+  anchorNode: cytoscape.NodeSingular,
+  columns: number,
+  rows: number,
+) => {
+  const anchorPosition = anchorNode.position();
+  const blockWidth = (columns - 1) * DIAGNOSIS_GRID_COLUMN_GAP;
+  const blockHeight = (rows - 1) * DIAGNOSIS_GRID_ROW_GAP;
+  const horizontalOffset = Math.max(230, blockWidth / 2 + 150);
+  const verticalOffset = Math.max(150, blockHeight / 2 + 110);
+  const candidates = [
+    {
+      x: anchorPosition.x - blockWidth - horizontalOffset,
+      y: anchorPosition.y - blockHeight / 2,
+      bias: 0,
+    },
+    {
+      x: anchorPosition.x - blockWidth - horizontalOffset,
+      y: anchorPosition.y - blockHeight - verticalOffset,
+      bias: 120,
+    },
+    {
+      x: anchorPosition.x - blockWidth - horizontalOffset,
+      y: anchorPosition.y + verticalOffset,
+      bias: 120,
+    },
+    {
+      x: anchorPosition.x + horizontalOffset,
+      y: anchorPosition.y - blockHeight / 2,
+      bias: 260,
+    },
+    {
+      x: anchorPosition.x - blockWidth / 2,
+      y: anchorPosition.y + verticalOffset,
+      bias: 180,
+    },
+    {
+      x: anchorPosition.x - blockWidth / 2,
+      y: anchorPosition.y - blockHeight - verticalOffset,
+      bias: 180,
+    },
+  ];
+
+  const blockingDrugNodes = cy
+    .nodes('node[type="Drug"]')
+    .filter((node) => node.id() !== anchorNode.id());
+
+  return candidates
+    .map((candidate) => {
+      const rect = {
+        left: candidate.x - DIAGNOSIS_GRID_NODE_CLEARANCE,
+        right: candidate.x + blockWidth + DIAGNOSIS_GRID_NODE_CLEARANCE,
+        top: candidate.y - DIAGNOSIS_GRID_NODE_CLEARANCE / 2,
+        bottom: candidate.y + blockHeight + DIAGNOSIS_GRID_NODE_CLEARANCE / 2,
+      };
+      let collisionScore = candidate.bias;
+
+      blockingDrugNodes.forEach((node) => {
+        const distance = getRectDistance(node.position(), rect);
+        if (distance === 0) {
+          collisionScore += 100000;
+          return;
+        }
+
+        if (distance < DIAGNOSIS_GRID_NODE_CLEARANCE) {
+          collisionScore += (DIAGNOSIS_GRID_NODE_CLEARANCE - distance) * 250;
+        }
+      });
+
+      return { ...candidate, collisionScore };
+    })
+    .sort((a, b) => a.collisionScore - b.collisionScore)[0];
+};
+
 const arrangeDiagnosisClusters = (cy: Core) => {
   const diagnosisGroups = new Map<string, cytoscape.NodeSingular[]>();
 
@@ -162,11 +320,7 @@ const arrangeDiagnosisClusters = (cy: Core) => {
       );
       const columns = Math.min(5, Math.max(3, Math.ceil(Math.sqrt(sortedNodes.length))));
       const rows = Math.ceil(sortedNodes.length / columns);
-      const anchorPosition = anchorNode.position();
-      const blockWidth = (columns - 1) * DIAGNOSIS_GRID_COLUMN_GAP;
-      const blockHeight = (rows - 1) * DIAGNOSIS_GRID_ROW_GAP;
-      const startX = anchorPosition.x - blockWidth - 210;
-      const startY = anchorPosition.y - blockHeight / 2;
+      const { x: startX, y: startY } = getDiagnosisGridStart(cy, anchorNode, columns, rows);
 
       sortedNodes.forEach((node, index) => {
         const column = index % columns;
@@ -187,6 +341,7 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
   const [hoveredEdge, setHoveredEdge] = useState<any>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [selectedSeverityGroup, setSelectedSeverityGroup] = useState<string | null>(null);
   const [nodeEdges, setNodeEdges] = useState<any[]>([]);
 
   useEffect(() => {
@@ -356,6 +511,7 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
       });
 
       layout.one('layoutstop', () => {
+        arrangeDrugSeverityClusters(cy);
         arrangeDiagnosisClusters(cy);
         cy.fit(cy.elements(), 80);
       });
@@ -367,16 +523,19 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
         event.preventDefault();
         const node = event.target;
         const nodeId = node.id();
+        const isSeverityGroup = node.isParent() || usedSeverities.has(nodeId);
 
-        // Get all edges connected to this node immediately
-        const connectedEdges = cy.edges().filter((edge: any) => {
-          return edge.data('source') === nodeId || edge.data('target') === nodeId;
-        });
+        const connectedEdges = isSeverityGroup
+          ? cy.edges().filter((edge: any) => edge.data('severity') === nodeId)
+          : cy.edges().filter((edge: any) => {
+              return edge.data('source') === nodeId || edge.data('target') === nodeId;
+            });
 
         const edgesData = connectedEdges.map((edge: any) => edge.data());
 
         // Update state in a single batch to ensure reliability
         setSelectedNode(nodeId);
+        setSelectedSeverityGroup(isSeverityGroup ? nodeId : null);
         setNodeEdges(edgesData);
 
         if (onNodeSelect) {
@@ -511,7 +670,10 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
               {selectedNode}
             </h3>
             <button
-              onClick={() => setSelectedNode(null)}
+              onClick={() => {
+                setSelectedNode(null);
+                setSelectedSeverityGroup(null);
+              }}
               className="text-slate-400 hover:text-slate-600 ml-2 flex-shrink-0"
             >
               <FontAwesomeIcon icon={faTimes} className="w-4 h-4" />
@@ -520,10 +682,14 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
           <div className="p-3 space-y-2">
             {nodeEdges.length === 0 && <p className="text-xs text-slate-500">No connections</p>}
             {nodeEdges.map((edge, idx) => {
-              const otherNode = edge.source === selectedNode ? edge.target : edge.source;
+              const connectionLabel = selectedSeverityGroup
+                ? `${edge.source} -> ${edge.target}`
+                : edge.source === selectedNode
+                ? edge.target
+                : edge.source;
               return (
                 <div key={idx} className="border border-slate-200 rounded-lg p-2 space-y-1.5">
-                  <span className="font-medium text-xs text-slate-900 leading-tight">{otherNode}</span>
+                  <span className="font-medium text-xs text-slate-900 leading-tight">{connectionLabel}</span>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {edge.severity && (
                       <span className={`px-1.5 py-0.5 text-xs font-semibold rounded ${
