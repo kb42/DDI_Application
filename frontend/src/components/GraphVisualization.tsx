@@ -9,6 +9,178 @@ interface GraphVisualizationProps {
   onNodeSelect?: (nodeId: string) => void;
 }
 
+const GRAPH_FONT_FAMILY = 'Inter, system-ui, sans-serif';
+const NODE_FONT_SIZE = 11;
+const APPROX_CHAR_WIDTH = NODE_FONT_SIZE * 0.58;
+const LINE_HEIGHT_PX = NODE_FONT_SIZE * 1.22;
+const DIAGNOSIS_GRID_COLUMN_GAP = 132;
+const DIAGNOSIS_GRID_ROW_GAP = 62;
+
+const getWrappedLabel = (label: string, maxLineChars: number): string[] => {
+  const normalizedLabel = String(label || '').replace(/\s+/g, ' ').trim();
+  if (!normalizedLabel) return [''];
+
+  const breakableLabel = normalizedLabel.replace(/\//g, '/ ');
+  const words = breakableLabel.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+
+  words.forEach((word) => {
+    if (!word) return;
+
+    const candidate = currentLine ? `${currentLine} ${word}` : word;
+    if (candidate.length <= maxLineChars) {
+      currentLine = candidate;
+      return;
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+      currentLine = '';
+    }
+
+    if (word.length <= maxLineChars) {
+      currentLine = word;
+      return;
+    }
+
+    for (let i = 0; i < word.length; i += maxLineChars) {
+      const chunk = word.slice(i, i + maxLineChars);
+      if (chunk.length === maxLineChars) {
+        lines.push(chunk);
+      } else {
+        currentLine = chunk;
+      }
+    }
+  });
+
+  if (currentLine) lines.push(currentLine);
+
+  return lines.map((line) => line.replace(/\/\s+/g, '/'));
+};
+
+const getCompactLabel = (label: string, maxLineChars: number, maxLines: number): string[] => {
+  const lines = getWrappedLabel(label, maxLineChars);
+  if (lines.length <= maxLines) return lines;
+
+  const compactLines = lines.slice(0, maxLines);
+  const finalLine = compactLines[maxLines - 1];
+  compactLines[maxLines - 1] =
+    finalLine.length > maxLineChars - 3
+      ? `${finalLine.slice(0, maxLineChars - 3)}...`
+      : `${finalLine}...`;
+
+  return compactLines;
+};
+
+const getNodeTextMetrics = (
+  label: string,
+  maxLineChars: number,
+  horizontalPadding: number,
+  verticalPadding: number,
+  maxLines?: number,
+) => {
+  const labelLines = maxLines
+    ? getCompactLabel(label, maxLineChars, maxLines)
+    : getWrappedLabel(label, maxLineChars);
+  const longestLineLength = Math.max(...labelLines.map((line) => line.length), 1);
+  const textWidth = longestLineLength * APPROX_CHAR_WIDTH;
+  const textHeight = labelLines.length * LINE_HEIGHT_PX;
+
+  return {
+    displayLabel: labelLines.join('\n'),
+    textWidth,
+    textHeight,
+    lineCount: labelLines.length,
+    width: Math.ceil(textWidth + horizontalPadding * 2),
+    height: Math.ceil(textHeight + verticalPadding * 2),
+  };
+};
+
+const getDrugNodeVisuals = (label: string) => {
+  const metrics = getNodeTextMetrics(label, 15, 14, 12);
+  const innerDiagonal = Math.sqrt(metrics.textWidth ** 2 + metrics.textHeight ** 2);
+  const diameter = Math.max(72, Math.min(150, Math.ceil(innerDiagonal + 34)));
+
+  return {
+    displayLabel: metrics.displayLabel,
+    nodeWidth: diameter,
+    nodeHeight: diameter,
+  };
+};
+
+const getDiagnosisNodeVisuals = (label: string) => {
+  const metrics = getNodeTextMetrics(label, 18, 14, 9, 2);
+
+  return {
+    displayLabel: metrics.displayLabel,
+    nodeWidth: Math.max(104, Math.min(150, metrics.width)),
+    nodeHeight: Math.max(42, Math.min(52, metrics.height)),
+  };
+};
+
+const getNodeVisuals = (label: string, type: string) => {
+  return type === 'Diagnosis' ? getDiagnosisNodeVisuals(label) : getDrugNodeVisuals(label);
+};
+
+const arrangeDiagnosisClusters = (cy: Core) => {
+  const diagnosisGroups = new Map<string, cytoscape.NodeSingular[]>();
+
+  cy.nodes('node[type="Diagnosis"]').forEach((diagnosisNode) => {
+    const connectedDrugs: cytoscape.NodeSingular[] = [];
+
+    diagnosisNode.connectedEdges().forEach((edge) => {
+      const source = edge.source();
+      const target = edge.target();
+      const otherNode = source.id() === diagnosisNode.id() ? target : source;
+
+      if (otherNode.data('type') === 'Drug') {
+        connectedDrugs.push(otherNode);
+      }
+    });
+
+    const connectedDrug = connectedDrugs.sort(
+      (a, b) => b.connectedEdges().length - a.connectedEdges().length,
+    )[0];
+
+    if (!connectedDrug) return;
+
+    const group = diagnosisGroups.get(connectedDrug.id()) || [];
+    group.push(diagnosisNode);
+    diagnosisGroups.set(connectedDrug.id(), group);
+  });
+
+  cy.batch(() => {
+    diagnosisGroups.forEach((diagnosisNodes, drugId) => {
+      if (diagnosisNodes.length < 6) return;
+
+      const anchorNode = cy.getElementById(drugId);
+      if (anchorNode.empty()) return;
+
+      const sortedNodes = [...diagnosisNodes].sort((a, b) =>
+        String(a.data('label')).localeCompare(String(b.data('label'))),
+      );
+      const columns = Math.min(5, Math.max(3, Math.ceil(Math.sqrt(sortedNodes.length))));
+      const rows = Math.ceil(sortedNodes.length / columns);
+      const anchorPosition = anchorNode.position();
+      const blockWidth = (columns - 1) * DIAGNOSIS_GRID_COLUMN_GAP;
+      const blockHeight = (rows - 1) * DIAGNOSIS_GRID_ROW_GAP;
+      const startX = anchorPosition.x - blockWidth - 210;
+      const startY = anchorPosition.y - blockHeight / 2;
+
+      sortedNodes.forEach((node, index) => {
+        const column = index % columns;
+        const row = Math.floor(index / columns);
+
+        node.position({
+          x: startX + column * DIAGNOSIS_GRID_COLUMN_GAP,
+          y: startY + row * DIAGNOSIS_GRID_ROW_GAP,
+        });
+      });
+    });
+  });
+};
+
 const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
@@ -36,28 +208,6 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
         elements: transformDataToElements(data),
         style: [
           {
-            selector: 'node',
-            style: {
-              'background-color': '#3b82f6',
-              'label': 'data(label)',
-              'color': '#ffffff',
-              'text-valign': 'center',
-              'text-halign': 'center',
-              'font-size': '11px',
-              'font-weight': 'bold',
-              'text-wrap': 'wrap',
-              'text-max-width': '80px',
-              'width': '70px',
-              'height': '70px',
-              'border-width': 2,
-              'border-color': '#1e40af',
-              'text-outline-width': 2,
-              'text-outline-color': '#000000',
-              'text-outline-opacity': 0.3,
-            }
-          },
-          // Parent nodes are for grouping by severity and can be invisible
-          {
             selector: 'node:parent',
             style: {
               'background-opacity': 0,
@@ -67,58 +217,77 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
           {
             selector: 'node[type="Drug"]',
             style: {
-              'background-color': '#3b82f6',
-              'border-color': '#1e40af',
+              'background-color': '#164e63',
               'shape': 'ellipse',
+              'width': 'data(nodeWidth)',
+              'height': 'data(nodeHeight)',
+              'text-valign': 'center',
+              'text-halign': 'center',
               'color': '#ffffff',
+              'font-size': `${NODE_FONT_SIZE}px`,
+              'font-weight': 700,
+              'font-family': GRAPH_FONT_FAMILY,
+              'text-wrap': 'wrap',
+              'text-max-width': 'data(textMaxWidth)',
+              'text-overflow-wrap': 'anywhere',
+              'text-justification': 'center',
+              'line-height': 1.22,
+              'text-outline-width': 0,
+              'border-width': 2,
+              'border-color': '#d9f99d',
+              'border-opacity': 0.45,
+              'label': 'data(displayLabel)',
             }
           },
           {
             selector: 'node[type="Diagnosis"]',
             style: {
-              'background-color': '#8b5cf6',
-              'border-color': '#6d28d9',
+              'background-color': '#5b21b6',
               'shape': 'round-rectangle',
+              'width': 'data(nodeWidth)',
+              'height': 'data(nodeHeight)',
+              'text-valign': 'center',
+              'text-halign': 'center',
               'color': '#ffffff',
-              'width': '90px',
-              'height': '90px',
               'font-size': '10px',
-              'text-max-width': '85px',
+              'font-weight': 700,
+              'font-family': GRAPH_FONT_FAMILY,
+              'text-wrap': 'wrap',
+              'text-max-width': 'data(textMaxWidth)',
+              'text-overflow-wrap': 'anywhere',
+              'text-justification': 'center',
+              'line-height': 1.22,
+              'text-outline-width': 0,
+              'border-width': 2,
+              'border-color': '#ddd6fe',
+              'border-opacity': 0.55,
+              'label': 'data(displayLabel)',
+            }
+          },
+          {
+            selector: 'node:selected',
+            style: {
+              'border-width': 3,
+              'border-color': '#f59e0b',
             }
           },
           {
             selector: 'edge',
             style: {
-              'width': 4,
-              'line-color': '#94a3b8',
-              'source-arrow-color': '#94a3b8',
-              'source-arrow-shape': 'triangle',
-              'target-arrow-color': '#94a3b8',
-              'target-arrow-shape': 'triangle',
+              'width': 2,
+              'line-color': '#cbd5e1',
+              'target-arrow-color': '#cbd5e1',
+              'target-arrow-shape': 'vee',
+              'source-arrow-shape': 'none',
               'curve-style': 'bezier',
-              'label': 'data(severity)',
-              'font-size': '12px',
-              'text-background-color': '#ffffff',
-              'text-background-opacity': 0.9,
-              'text-background-padding': '4px',
-              'color': '#1e293b',
-              'font-weight': 'bold',
-            }
-          },
-          // Autorotate labels to prevent overlap: https://stackoverflow.com/a/53737071
-          {
-            selector: "edge[label]",
-            style: {
-              'text-rotation': 'autorotate',
             }
           },
           {
             selector: 'edge[severity="Minor"]',
             style: {
               'line-color': '#22c55e',
-              'source-arrow-color': '#22c55e',
               'target-arrow-color': '#22c55e',
-              'width': 3,
+              'width': 2,
               'z-index': 1,
             }
           },
@@ -126,9 +295,8 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
             selector: 'edge[severity="Moderate"]',
             style: {
               'line-color': '#f59e0b',
-              'source-arrow-color': '#f59e0b',
               'target-arrow-color': '#f59e0b',
-              'width': 5,
+              'width': 3,
               'z-index': 2,
             }
           },
@@ -136,27 +304,19 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
             selector: 'edge[severity="Major"]',
             style: {
               'line-color': '#ef4444',
-              'source-arrow-color': '#ef4444',
               'target-arrow-color': '#ef4444',
-              'width': 6,
+              'width': 4,
               'z-index': 3,
             }
           },
-          {
-            selector: 'node:selected',
-            style: {
-              'border-width': 4,
-              'border-color': '#8b5cf6',
-            }
-          }
         ],
         layout: {
           name: 'cose',
           animate: true,
           animationDuration: 500,
-          padding: 80,
-          nodeRepulsion: 12000,
-          idealEdgeLength: 150,
+          padding: 100,
+          nodeRepulsion: 18000,
+          idealEdgeLength: 180,
           edgeElasticity: 80,
           gravity: 0.05,
         },
@@ -189,11 +349,18 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
         }
       });
 
-      cy.layout({
+      const layout = cy.layout({
         name: 'cose',
         animate: true,
         padding: 50,
-      }).run();
+      });
+
+      layout.one('layoutstop', () => {
+        arrangeDiagnosisClusters(cy);
+        cy.fit(cy.elements(), 80);
+      });
+
+      layout.run();
 
       // Handle node selection - use direct event handler for reliability
       cy.on('tap', 'node', (event) => {
@@ -340,7 +507,9 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
       {selectedNode && (
         <div className="w-80 h-full bg-white rounded-lg border border-slate-200 overflow-y-auto flex-shrink-0">
           <div className="sticky top-0 bg-white border-b border-slate-200 p-3 flex justify-between items-center">
-            <h3 className="font-semibold text-slate-900 text-sm truncate">{selectedNode}</h3>
+            <h3 className="font-semibold text-slate-900 text-sm leading-tight break-words" title={selectedNode}>
+              {selectedNode}
+            </h3>
             <button
               onClick={() => setSelectedNode(null)}
               className="text-slate-400 hover:text-slate-600 ml-2 flex-shrink-0"
@@ -447,6 +616,8 @@ const transformDataToElements = (data: any[]): ElementDefinition[] => {
     const nodeType1 = item.NodeType1?.[0] || 'Drug';
     const nodeType2 = item.NodeType2?.[0] || 'Drug';
     const edgeDetails = item.EdgeDetails || {};
+    const node1Visuals = getNodeVisuals(node1Name, nodeType1);
+    const node2Visuals = getNodeVisuals(node2Name, nodeType2);
 
     // Add first node (source drug)
     if (!nodeIds.has(node1Name)) {
@@ -454,7 +625,11 @@ const transformDataToElements = (data: any[]): ElementDefinition[] => {
         data: {
           id: node1Name,
           label: node1Name,
+          displayLabel: node1Visuals.displayLabel,
           type: nodeType1,
+          nodeWidth: node1Visuals.nodeWidth,
+          nodeHeight: node1Visuals.nodeHeight,
+          textMaxWidth: node1Visuals.nodeWidth - 24,
         }
       });
       nodeIds.add(node1Name);
@@ -466,7 +641,11 @@ const transformDataToElements = (data: any[]): ElementDefinition[] => {
         data: {
           id: node2Name,
           label: node2Name,
+          displayLabel: node2Visuals.displayLabel,
           type: nodeType2,
+          nodeWidth: node2Visuals.nodeWidth,
+          nodeHeight: node2Visuals.nodeHeight,
+          textMaxWidth: node2Visuals.nodeWidth - 24,
         }
       });
       nodeIds.add(node2Name);
