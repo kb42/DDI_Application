@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import GraphVisualization from './components/GraphVisualization'
-import { queryDrugInteractions } from './services/api'
+import { queryDrugInteractions, fetchInitialGraph, expandNode } from './services/api'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faMagic, faChevronUp, faChevronDown, faSearch } from '@fortawesome/free-solid-svg-icons'
 
@@ -9,12 +9,34 @@ function App() {
   const [graphData, setGraphData] = useState<any[]>([])
   const [summary, setSummary] = useState<string>('')
   const [query, setQuery] = useState<string>('')
+  // true when graphData contains only isolated seed nodes (no edges)
+  const isInitialState = useRef(true)
+
+  // Load isolated seed nodes on mount
+  useEffect(() => {
+    fetchInitialGraph().then((data) => {
+      setGraphData(data)
+      isInitialState.current = true
+    }).catch(() => {
+      // silently fail — blank canvas is acceptable if backend is unreachable
+    })
+  }, [])
 
   const mutation = useMutation({
     mutationFn: queryDrugInteractions,
     onSuccess: (data) => {
       setGraphData(data.result || [])
       setSummary(data.summary || '')
+      isInitialState.current = false
+    },
+  })
+
+  const expandMutation = useMutation({
+    mutationFn: expandNode,
+    onSuccess: (data) => {
+      setGraphData(data)
+      setSummary('')
+      isInitialState.current = false
     },
   })
 
@@ -22,9 +44,13 @@ function App() {
     mutation.mutate(q)
   }
 
+  // Only expand on node click when we're in the initial isolated-node state.
+  // Once a real query graph is loaded, node clicks just open the side panel as before.
   const handleNodeSelect = useCallback((nodeId: string) => {
-    console.log('Selected node:', nodeId);
-  }, []);
+    if (isInitialState.current) {
+      expandMutation.mutate(nodeId)
+    }
+  }, [])
 
   const [summaryExpanded, setSummaryExpanded] = useState(false);
 
@@ -63,7 +89,19 @@ function App() {
       <div className="flex-1 relative min-h-0 overflow-hidden">
         {graphData.length > 0 ? (
           <div className="absolute inset-0 p-4">
+            {/* Expanding overlay — shown while a node click is loading */}
+            {expandMutation.isPending && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 rounded-lg">
+                <p className="text-sm font-medium text-slate-600">Loading interactions…</p>
+              </div>
+            )}
             <GraphVisualization data={graphData} onNodeSelect={handleNodeSelect} />
+            {/* Hint shown only on the initial seed state */}
+            {isInitialState.current && !expandMutation.isPending && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-white/90 border border-slate-200 rounded-full shadow text-xs text-slate-500 pointer-events-none">
+                Click a node to explore its interactions, or search above
+              </div>
+            )}
           </div>
         ) : (
           <div className="h-full flex items-center justify-center">

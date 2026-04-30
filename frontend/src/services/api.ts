@@ -39,4 +39,14 @@ export const queryDrugInteractions = async (question: string): Promise<QueryResp
   };
 };
 
+export const fetchInitialGraph = async (): Promise<any[]> => {
+  const response = await api.get('/api/graph/init');
+  return response.data.data || [];
+};
+
+export const expandNode = async (nodeName: string): Promise<any[]> => {
+  const response = await api.post('/api/graph/expand', { node_name: nodeName });
+  return response.data.data || [];
+};
+
 export default api;

@@ -32,6 +32,10 @@ class QueryRequest(BaseModel):
     question: str
 
 
+class ExpandRequest(BaseModel):
+    node_name: str
+
+
 @app.get("/health")
 async def health_check():
     """health check endpoint"""
@@ -59,6 +63,59 @@ async def query_drug_interactions(request: QueryRequest):
             response.raise_for_status()
             return response.json()
 
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"llm backend error: {e.response.text}"
+        )
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"cannot connect to llm backend service: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"internal server error: {str(e)}"
+        )
+
+
+@app.get("/api/graph/init")
+async def get_initial_graph():
+    """proxy to fetch top 10 drugs and top 5 diagnoses for the initial canvas"""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(f"{LLM_BACKEND_URL}/api/graph/init")
+            response.raise_for_status()
+            return response.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"llm backend error: {e.response.text}"
+        )
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"cannot connect to llm backend service: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"internal server error: {str(e)}"
+        )
+
+
+@app.post("/api/graph/expand")
+async def expand_node(request: ExpandRequest):
+    """proxy to fetch all neighbors of a given node"""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{LLM_BACKEND_URL}/api/graph/expand",
+                json={"node_name": request.node_name}
+            )
+            response.raise_for_status()
+            return response.json()
     except httpx.HTTPStatusError as e:
         raise HTTPException(
             status_code=e.response.status_code,

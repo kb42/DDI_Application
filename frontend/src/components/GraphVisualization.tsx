@@ -318,7 +318,9 @@ const arrangeDiagnosisClusters = (cy: Core) => {
       const sortedNodes = [...diagnosisNodes].sort((a, b) =>
         String(a.data('label')).localeCompare(String(b.data('label'))),
       );
-      const columns = Math.min(5, Math.max(3, Math.ceil(Math.sqrt(sortedNodes.length))));
+
+      // Cap columns tighter for large sets so the grid stays compact near the anchor
+      const columns = Math.min(4, Math.max(3, Math.ceil(Math.sqrt(sortedNodes.length))));
       const rows = Math.ceil(sortedNodes.length / columns);
       const { x: startX, y: startY } = getDiagnosisGridStart(cy, anchorNode, columns, rows);
 
@@ -465,16 +467,8 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
             }
           },
         ],
-        layout: {
-          name: 'cose',
-          animate: true,
-          animationDuration: 500,
-          padding: 100,
-          nodeRepulsion: 18000,
-          idealEdgeLength: 180,
-          edgeElasticity: 80,
-          gravity: 0.05,
-        },
+        // Suppress initial layout — we run it manually below after grouping
+        layout: { name: 'preset' },
       });
 
       // Group nodes by severity using parent nodes
@@ -493,30 +487,78 @@ const GraphVisualization = ({ data, onNodeSelect }: GraphVisualizationProps) => 
 
       cy.nodes().forEach(node => {
         const edges = node.connectedEdges();
-
-        let group = 'Unknown';
-
         if (edges.length > 0) {
-          group = edges[0].data('severity');
+          const group = edges[0].data('severity');
           if (usedSeverities.has(group)) {
             node.move({ parent: group });
           }
         }
       });
 
-      const layout = cy.layout({
-        name: 'cose',
-        animate: true,
-        padding: 50,
-      });
+      const hasEdges = cy.edges().length > 0;
 
-      layout.one('layoutstop', () => {
-        arrangeDrugSeverityClusters(cy);
-        arrangeDiagnosisClusters(cy);
-        cy.fit(cy.elements(), 80);
-      });
+      if (!hasEdges) {
+        // Seed state: arrange drugs in centered rows, diagnoses in a smaller row below
+        const container = containerRef.current!;
+        const W = container.clientWidth;
+        const H = container.clientHeight;
 
-      layout.run();
+        const drugNodes = cy.nodes('[type="Drug"]');
+        const diagNodes = cy.nodes('[type="Diagnosis"]');
+        const drugCount = drugNodes.length;
+        const diagCount = diagNodes.length;
+
+        // Drugs: up to 5 per row, centered horizontally
+        const drugCols = Math.min(5, drugCount);
+        const drugRows = Math.ceil(drugCount / drugCols);
+        const drugHGap = Math.min(220, (W - 120) / drugCols);
+        const drugVGap = 180;
+        const drugStartX = W / 2 - ((drugCols - 1) * drugHGap) / 2;
+        const drugStartY = H * 0.28 - ((drugRows - 1) * drugVGap) / 2;
+
+        drugNodes.forEach((node, i) => {
+          const col = i % drugCols;
+          const row = Math.floor(i / drugCols);
+          node.position({ x: drugStartX + col * drugHGap, y: drugStartY + row * drugVGap });
+        });
+
+        // Diagnoses: single row centered below the drugs
+        const diagHGap = Math.min(200, (W - 120) / Math.max(diagCount, 1));
+        const diagStartX = W / 2 - ((diagCount - 1) * diagHGap) / 2;
+        const diagY = drugStartY + drugRows * drugVGap + 80;
+
+        diagNodes.forEach((node, i) => {
+          node.position({ x: diagStartX + i * diagHGap, y: diagY });
+        });
+
+        cy.fit(cy.elements(), 60);
+      } else {
+        // Run cose silently (no animation) then smoothly fit — avoids the
+        // shaking physics-simulation effect while still producing a good layout
+        const layout = cy.layout({
+          name: 'cose',
+          animate: false,
+          padding: 60,
+          nodeRepulsion: 18000,
+          idealEdgeLength: 180,
+          edgeElasticity: 80,
+          gravity: 0.05,
+          randomize: true,
+        } as any);
+
+        layout.one('layoutstop', () => {
+          arrangeDrugSeverityClusters(cy);
+          arrangeDiagnosisClusters(cy);
+          // Smooth animated fit after layout is fully computed
+          cy.animate({
+            fit: { eles: cy.elements(), padding: 80 },
+            duration: 400,
+            easing: 'ease-in-out-cubic',
+          } as any);
+        });
+
+        layout.run();
+      }
 
       // Handle node selection - use direct event handler for reliability
       cy.on('tap', 'node', (event) => {
@@ -770,22 +812,13 @@ const transformDataToElements = (data: any[]): ElementDefinition[] => {
   const nodeIds = new Set<string>();
 
   data.forEach((item, index) => {
-    // New standardized backend format from prompt_builder.py
-    // Expected fields: Target1, Target2, NodeType1, NodeType2, EdgeDetails, EdgeType
-    if (!item.Target1 || !item.Target2) {
-      console.warn('Skipping item with missing Target1 or Target2:', item);
-      return;
-    }
+    if (!item.Target1) return;
 
     const node1Name = item.Target1;
-    const node2Name = item.Target2;
+    const node2Name = item.Target2; // null for isolated seed nodes
     const nodeType1 = item.NodeType1?.[0] || 'Drug';
-    const nodeType2 = item.NodeType2?.[0] || 'Drug';
-    const edgeDetails = item.EdgeDetails || {};
     const node1Visuals = getNodeVisuals(node1Name, nodeType1);
-    const node2Visuals = getNodeVisuals(node2Name, nodeType2);
 
-    // Add first node (source drug)
     if (!nodeIds.has(node1Name)) {
       elements.push({
         data: {
@@ -801,7 +834,13 @@ const transformDataToElements = (data: any[]): ElementDefinition[] => {
       nodeIds.add(node1Name);
     }
 
-    // Add second node (target drug)
+    // Isolated seed node — no edge to add
+    if (!node2Name) return;
+
+    const nodeType2 = item.NodeType2?.[0] || 'Drug';
+    const edgeDetails = item.EdgeDetails || {};
+    const node2Visuals = getNodeVisuals(node2Name, nodeType2);
+
     if (!nodeIds.has(node2Name)) {
       elements.push({
         data: {
@@ -817,7 +856,6 @@ const transformDataToElements = (data: any[]): ElementDefinition[] => {
       nodeIds.add(node2Name);
     }
 
-    // Add edge/relationship with ALL EdgeDetails
     elements.push({
       data: {
         id: `edge-${index}`,
@@ -834,7 +872,6 @@ const transformDataToElements = (data: any[]): ElementDefinition[] => {
         safer_alt: edgeDetails.safer_alt,
         rationale: edgeDetails.rationale,
         source_type: edgeDetails.source,
-        // For diagnosis associations
         admission_count: edgeDetails.admission_count,
         avg_severity: edgeDetails.avg_severity,
         pct_of_drug_admissions: edgeDetails.pct_of_drug_admissions,
