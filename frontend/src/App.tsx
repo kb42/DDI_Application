@@ -29,7 +29,7 @@ function App() {
   const [summaryExpanded, setSummaryExpanded] = useState(false);
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="relative h-screen overflow-hidden flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Top Search Bar */}
       <div className="flex-shrink-0 bg-white border-b border-slate-200 shadow-sm">
         <div className="px-6 py-3 flex items-center gap-4">
@@ -41,12 +41,12 @@ function App() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Ask a question about drug interactions..."
               disabled={mutation.isPending}
-              className="flex-1 px-4 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-4 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#3f3f46]"
             />
             <button
               type="submit"
               disabled={mutation.isPending || !query.trim()}
-              className="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:bg-slate-300"
+              className="px-6 py-2 bg-[#3f3f46] text-white text-sm font-medium rounded-lg hover:bg-[#27272a] disabled:bg-slate-300 cursor-pointer disabled:cursor-not-allowed transition-colors"
             >
               {mutation.isPending ? 'Searching...' : 'Search'}
             </button>
@@ -60,7 +60,7 @@ function App() {
       </div>
 
       {/* Main Graph Area */}
-      <div className="flex-1 relative min-h-0">
+      <div className="flex-1 relative min-h-0 overflow-hidden">
         {graphData.length > 0 ? (
           <div className="absolute inset-0 p-4">
             <GraphVisualization data={graphData} onNodeSelect={handleNodeSelect} />
@@ -78,25 +78,37 @@ function App() {
 
       {/* Bottom AI Summary - Expandable */}
       {summary && (
-        <div className="flex-shrink-0 bg-white border-t border-slate-200 shadow-lg">
+        <div className="absolute inset-x-4 bottom-4 z-20 overflow-hidden rounded-t-lg rounded-b-md bg-white border border-zinc-200 shadow-[0_-10px_30px_rgba(15,23,42,0.16)]">
           <button
             onClick={() => setSummaryExpanded(!summaryExpanded)}
-            className="w-full px-6 py-3 flex items-center justify-between hover:bg-slate-50"
+            className="w-full cursor-pointer px-5 py-3 flex items-center justify-between bg-[#3f3f46] text-white hover:bg-[#27272a] focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2 transition-colors"
+            aria-expanded={summaryExpanded}
+            aria-controls="ai-summary-content"
           >
-            <div className="flex items-center gap-2">
-              <FontAwesomeIcon icon={faMagic} className="text-blue-600 w-4 h-4" />
-              <h3 className="text-sm font-semibold text-slate-900">AI Summary</h3>
+            <div className="flex min-w-0 items-center gap-3 text-left">
+              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/15">
+                <FontAwesomeIcon icon={faMagic} className="w-3.5 h-3.5" />
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold leading-tight">AI Summary</h3>
+                {!summaryExpanded && (
+                  <p className="mt-0.5 text-xs text-zinc-200">
+                    View generated clinical context for this result
+                  </p>
+                )}
+              </div>
             </div>
             <FontAwesomeIcon
               icon={summaryExpanded ? faChevronDown : faChevronUp}
-              className="text-slate-400 w-4 h-4"
+              className="ml-4 h-4 w-4 flex-shrink-0 text-zinc-200"
             />
           </button>
           <div
+            id="ai-summary-content"
             className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
             style={{ maxHeight: summaryExpanded ? '400px' : '0px' }}
           >
-            <div className="px-6 pb-4 overflow-y-auto" style={{ maxHeight: '400px' }}>
+            <div className="px-5 pt-3 pb-4 overflow-y-auto border-t border-zinc-100" style={{ maxHeight: '400px' }}>
               <p className="text-sm text-slate-700 leading-relaxed">{summary}</p>
             </div>
           </div>
